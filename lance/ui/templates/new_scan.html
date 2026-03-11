@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}New Scan{% endblock %}
+{% block nav_new %}active{% endblock %}
+{% block breadcrumb %}<a href="/" class="bc-link">Dashboard</a> / New Scan{% endblock %}
+
+{% block content %}
+
+<div class="scan-layout">
+
+  <!-- FORM PANEL -->
+  <div class="card scan-form-card">
+    <div class="card-head">
+      <span class="card-title">Launch Red Team Scan</span>
+      <span class="card-sub">All probes run locally — no data leaves your machine</span>
+    </div>
+
+    <div class="form-body" id="scanForm">
+
+      <!-- Model -->
+      <div class="form-group">
+        <label class="form-label">Target Model <span class="required">*</span></label>
+        <input type="text" id="modelInput" class="form-input"
+               placeholder="ollama/llama3  or  openai/gpt-4o  or  anthropic/claude-haiku-4-5-20251001"
+               autocomplete="off">
+        <div class="form-hint">Any LiteLLM-compatible model string</div>
+        <div class="model-presets">
+          <button class="preset-btn" onclick="setModel('ollama/llama3')">ollama/llama3</button>
+          <button class="preset-btn" onclick="setModel('ollama/mistral')">ollama/mistral</button>
+          <button class="preset-btn" onclick="setModel('openai/gpt-4o')">openai/gpt-4o</button>
+          <button class="preset-btn" onclick="setModel('openai/gpt-4o-mini')">openai/gpt-4o-mini</button>
+          <button class="preset-btn" onclick="setModel('anthropic/claude-haiku-4-5-20251001')">claude-haiku</button>
+        </div>
+      </div>
+
+      <!-- Campaign Name -->
+      <div class="form-group">
+        <label class="form-label">Campaign Name <span class="text-muted">(optional)</span></label>
+        <input type="text" id="nameInput" class="form-input" placeholder="Auto-generated from model name">
+      </div>
+
+      <!-- Attack Modules -->
+      <div class="form-group">
+        <label class="form-label">Attack Modules</label>
+        <div class="modules-select">
+          <label class="module-check all-check">
+            <input type="checkbox" id="allModules" checked onchange="toggleAll(this)">
+            <span class="mc-box"></span>
+            <span class="mc-label">All Modules ({{ modules|length }} total)</span>
+          </label>
+          <div class="modules-list" id="modulesList">
+            {% for m in modules %}
+            <label class="module-check">
+              <input type="checkbox" class="mod-cb" value="{{ m.name }}" checked>
+              <span class="mc-box"></span>
+              <div class="mc-info">
+                <span class="mc-label">{{ m.name.replace('_',' ').title() }}</span>
+                <span class="mc-meta">{{ m.owasp_ref }} · {{ m.total_probes }} probes</span>
+              </div>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- System Prompt -->
+      <div class="form-group">
+        <label class="form-label">System Prompt <span class="text-muted">(optional)</span></label>
+        <textarea id="systemPromptInput" class="form-textarea"
+                  placeholder="Paste the system prompt your model is deployed with…&#10;&#10;Leave blank to test the model with no system prompt."></textarea>
+        <div class="form-hint">Providing the real system prompt gives more accurate results</div>
+      </div>
+
+      <!-- Submit -->
+      <div class="form-actions">
+        <button class="btn-primary launch-btn" id="launchBtn" onclick="launchScan()">
+          <span id="launchBtnText">Fire Probes →</span>
+        </button>
+        <a href="/" class="btn-ghost-sm">Cancel</a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SIDE INFO -->
+  <div class="scan-info">
+
+    <div class="card mb-16">
+      <div class="card-ttl">What happens next</div>
+      <div class="scan-steps">
+        <div class="ss-item">
+          <div class="ss-n">01</div>
+          <div class="ss-text">Campaign created and queued in the database</div>
+        </div>
+        <div class="ss-item">
+          <div class="ss-n">02</div>
+          <div class="ss-text">195+ adversarial probes fired at your model asynchronously</div>
+        </div>
+        <div class="ss-item">
+          <div class="ss-n">03</div>
+          <div class="ss-text">Each response scored by heuristics + LLM judge at 72% threshold</div>
+        </div>
+        <div class="ss-item">
+          <div class="ss-n">04</div>
+          <div class="ss-text">Live progress shown via WebSocket — redirected to results on completion</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-ttl">Module Coverage</div>
+      <div class="module-info-list">
+        {% for m in modules %}
+        <div class="mi-row">
+          <div class="mi-dot" style="background:{% if loop.index == 1 %}#DC2626{% elif loop.index == 2 %}#7E22CE{% elif loop.index == 3 %}#EA580C{% elif loop.index == 4 %}#1050D0{% else %}#0E7490{% endif %}"></div>
+          <div class="mi-body">
+            <div class="mi-name">{{ m.name.replace('_',' ').title() }}</div>
+            <div class="mi-meta">{{ m.owasp_ref }} · {{ m.seed_count }} seeds · {{ m.total_probes }} probes</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- LAUNCH PROGRESS OVERLAY -->
+<div class="launch-overlay" id="launchOverlay" style="display:none">
+  <div class="launch-modal">
+    <div class="lm-icon">
+      <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+        <polygon points="4,24 38,12 44,24 38,36" fill="#1050D0" opacity="0.3"/>
+        <polygon points="4,24 38,12 44,24 38,36" fill="none" stroke="#1050D0" stroke-width="2.5"/>
+        <line x1="4" y1="24" x2="44" y2="24" stroke="#1050D0" stroke-width="1.2" opacity="0.5"/>
+        <circle cx="44" cy="24" r="3.5" fill="#1050D0"/>
+      </svg>
+    </div>
+    <div class="lm-title">Scan Launched</div>
+    <div class="lm-body" id="lmBody">Connecting to campaign…</div>
+    <div class="lm-bar-bg"><div class="lm-bar-fill" id="lmBar" style="width:0%"></div></div>
+    <div class="lm-sub" id="lmSub">Initialising…</div>
+    <a href="/" id="lmViewLink" class="btn-primary-sm mt-8" style="display:none">View in Dashboard →</a>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let activeCampaignId = null;
+
+function setModel(m) {
+  document.getElementById('modelInput').value = m;
+}
+
+function toggleAll(cb) {
+  document.querySelectorAll('.mod-cb').forEach(c => c.checked = cb.checked);
+}
+
+function getSelectedModules() {
+  const all = document.getElementById('allModules').checked;
+  if (all) return ['all'];
+  return Array.from(document.querySelectorAll('.mod-cb:checked')).map(c => c.value);
+}
+
+// Sync "All" checkbox state
+document.querySelectorAll('.mod-cb').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const all = document.querySelectorAll('.mod-cb');
+    const checked = document.querySelectorAll('.mod-cb:checked');
+    document.getElementById('allModules').checked = all.length === checked.length;
+  });
+});
+
+async function launchScan() {
+  const model = document.getElementById('modelInput').value.trim();
+  if (!model) {
+    document.getElementById('modelInput').focus();
+    document.getElementById('modelInput').classList.add('input-error');
+    return;
+  }
+  document.getElementById('modelInput').classList.remove('input-error');
+
+  const payload = {
+    model,
+    name:          document.getElementById('nameInput').value.trim() || undefined,
+    system_prompt: document.getElementById('systemPromptInput').value.trim() || undefined,
+    modules:       getSelectedModules(),
+  };
+
+  // Disable button
+  const btn = document.getElementById('launchBtn');
+  btn.disabled = true;
+  document.getElementById('launchBtnText').textContent = 'Launching…';
+
+  try {
+    const r = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Launch failed');
+
+    activeCampaignId = data.campaign_id;
+    showProgress(activeCampaignId);
+
+  } catch (err) {
+    btn.disabled = false;
+    document.getElementById('launchBtnText').textContent = 'Fire Probes →';
+    alert(`Error: ${err.message}`);
+  }
+}
+
+function showProgress(campaignId) {
+  document.getElementById('launchOverlay').style.display = 'flex';
+  document.getElementById('lmBody').textContent = `Campaign: ${campaignId.slice(0,8)}`;
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/${campaignId}`);
+
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'progress') {
+      document.getElementById('lmBar').style.width = msg.pct + '%';
+      document.getElementById('lmSub').textContent = `${msg.current} / ${msg.total} probes — ${msg.message}`;
+    }
+    if (msg.type === 'complete') {
+      document.getElementById('lmBar').style.width = '100%';
+      document.getElementById('lmSub').textContent = `Complete — Risk Score: ${msg.risk_score?.toFixed(1) ?? '—'} / 10`;
+      document.getElementById('lmBody').textContent = 'Scan finished. Redirecting…';
+      setTimeout(() => window.location = `/campaign/${campaignId}`, 1200);
+    }
+  };
+
+  ws.onerror = () => {
+    document.getElementById('lmSub').textContent = 'WebSocket error — check dashboard for progress';
+    document.getElementById('lmViewLink').style.display = 'inline-flex';
+  };
+
+  setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 15000);
+}
+</script>
+{% endblock %}

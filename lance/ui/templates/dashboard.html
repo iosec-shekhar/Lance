@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- STATS ROW -->
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="sc-n">{{ stats.total }}</div>
+    <div class="sc-l">Total Campaigns</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n blue">{{ stats.completed }}</div>
+    <div class="sc-l">Completed</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n {% if stats.running > 0 %}orange{% endif %}">{{ stats.running }}</div>
+    <div class="sc-l">Running</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n {% if stats.avg_risk >= 7 %}red{% elif stats.avg_risk >= 4 %}orange{% else %}green{% endif %}">
+      {{ stats.avg_risk }}
+    </div>
+    <div class="sc-l">Avg Risk Score</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n purple">{{ stats.total_findings }}</div>
+    <div class="sc-l">Total Findings</div>
+  </div>
+</div>
+
+<!-- RISK TREND CHART -->
+{% if stats.completed > 0 %}
+<div class="card mb-24">
+  <div class="card-head">
+    <span class="card-title">Risk Score Trend</span>
+    <span class="card-sub">Last {{ stats.completed }} completed scans</span>
+  </div>
+  <div style="height:180px;padding:8px 0">
+    <canvas id="trendChart"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- CAMPAIGNS TABLE -->
+<div class="card">
+  <div class="card-head">
+    <span class="card-title">All Campaigns</span>
+    <div class="card-actions">
+      <input type="text" id="searchInput" placeholder="Search model or name…" class="search-input" oninput="filterTable()">
+    </div>
+  </div>
+
+  {% if campaigns %}
+  <div class="table-wrap">
+    <table class="data-table" id="campaignTable">
+      <thead>
+        <tr>
+          <th>Campaign</th>
+          <th>Model</th>
+          <th>Status</th>
+          <th>Probes</th>
+          <th>Findings</th>
+          <th>Risk</th>
+          <th>Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in campaigns %}
+        <tr class="tr-link" onclick="window.location='/campaign/{{ c.id }}'" data-search="{{ c.name|lower }} {{ c.target_model|lower }}">
+          <td>
+            <div class="cell-primary">{{ c.name }}</div>
+            <div class="cell-mono">{{ c.id_short }}</div>
+          </td>
+          <td>
+            <span class="model-tag">{{ c.target_model }}</span>
+          </td>
+          <td>
+            <span class="badge badge-{{ c.status }}">{{ c.status }}</span>
+          </td>
+          <td class="num">{{ c.total_probes }}</td>
+          <td class="num">
+            {% if c.findings_count > 0 %}
+            <span class="findings-pill">{{ c.findings_count }}</span>
+            {% else %}
+            <span class="text-muted">0</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if c.risk_score is not none %}
+            <span class="risk-score risk-{% if c.risk_score >= 7 %}high{% elif c.risk_score >= 4 %}med{% else %}low{% endif %}">
+              {{ "%.1f"|format(c.risk_score) }}
+            </span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-muted font-mono" style="font-size:11px">
+            {{ c.created_at[:10] if c.created_at else '—' }}
+          </td>
+          <td onclick="event.stopPropagation()">
+            <div class="row-actions">
+              {% if c.status == 'completed' %}
+              <a href="/api/report/{{ c.id }}" target="_blank" class="action-btn" title="View Report">↗</a>
+              {% endif %}
+              <button class="action-btn danger" onclick="deleteCampaign('{{ c.id }}')" title="Delete">✕</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <div class="es-icon">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <polygon points="4,24 38,12 44,24 38,36" fill="#1050D0" opacity="0.15"/>
+        <polygon points="4,24 38,12 44,24 38,36" fill="none" stroke="#1050D0" stroke-width="2"/>
+        <line x1="4" y1="24" x2="44" y2="24" stroke="#1050D0" stroke-width="1" opacity="0.4"/>
+        <circle cx="44" cy="24" r="3" fill="#1050D0"/>
+      </svg>
+    </div>
+    <div class="es-title">No campaigns yet</div>
+    <div class="es-body">Launch your first red team scan to see results here.</div>
+    <a href="/new" class="btn-primary">Start First Scan →</a>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Risk trend chart ──────────────────────────────────────────────────────────
+const trendData = {{ trend_json | safe }};
+if (trendData.length && document.getElementById('trendChart')) {
+  const mono = "'Space Mono', monospace";
+  new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels: trendData.map(d => d.label),
+      datasets: [{
+        label: 'Risk Score',
+        data: trendData.map(d => d.score),
+        borderColor: '#1050D0',
+        backgroundColor: 'rgba(16,80,208,0.07)',
+        borderWidth: 2,
+        pointBackgroundColor: trendData.map(d =>
+          d.score >= 7 ? '#DC2626' : d.score >= 4 ? '#EA580C' : '#0E7490'
+        ),
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        y: { min: 0, max: 10, grid: { color: 'rgba(226,228,238,0.7)' },
+             ticks: { font: { family: mono, size: 10 }, color: '#8B8FA8' } },
+        x: { grid: { display: false },
+             ticks: { font: { family: mono, size: 10 }, color: '#8B8FA8' } },
+      },
+      plugins: { legend: { display: false },
+                 tooltip: { callbacks: {
+                   label: ctx => ` Risk: ${ctx.parsed.y.toFixed(1)} / 10`,
+                   title: ctx => trendData[ctx[0].dataIndex]?.model || ctx[0].label,
+                 }}},
+    }
+  });
+}
+
+// ── Table filter ──────────────────────────────────────────────────────────────
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  document.querySelectorAll('#campaignTable tbody tr').forEach(row => {
+    row.style.display = row.dataset.search?.includes(q) ? '' : 'none';
+  });
+}
+
+// ── Delete campaign ───────────────────────────────────────────────────────────
+async function deleteCampaign(id) {
+  if (!confirm('Delete this campaign and all its data?')) return;
+  const r = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
+  if (r.ok) location.reload();
+  else alert('Delete failed');
+}
+</script>
+{% endblock %}

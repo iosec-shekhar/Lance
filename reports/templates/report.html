@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LANCE — Security Assessment Report — {{ campaign.target_model }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+:root {
+  --blue:#1050D0; --blue-lt:#EBF0FD; --blue-md:#C5D4F8;
+  --ink:#0D0E14; --ink2:#282A35; --body:#44475A; --muted:#8B8FA8;
+  --rule:#E2E4EE; --bg:#F8F9FC; --white:#FFFFFF;
+  --sev-c:#7E22CE; --sev-c-lt:rgba(126,34,206,0.1); --sev-c-bd:rgba(126,34,206,0.3);
+  --sev-h:#DC2626; --sev-h-lt:rgba(220,38,38,0.1);  --sev-h-bd:rgba(220,38,38,0.3);
+  --sev-m:#EA580C; --sev-m-lt:rgba(234,88,12,0.1);  --sev-m-bd:rgba(234,88,12,0.3);
+  --sev-l:#0E7490; --sev-l-lt:rgba(14,116,144,0.1); --sev-l-bd:rgba(14,116,144,0.3);
+  --f-d:'Syne',sans-serif; --f-b:'DM Sans',sans-serif; --f-m:'Space Mono',monospace;
+}
+body { background:var(--bg); color:var(--ink); font-family:var(--f-b); font-size:13px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+
+/* COVER */
+.cover { background:var(--white); min-height:100vh; display:grid; grid-template-rows:auto 1fr auto; page-break-after:always; position:relative; overflow:hidden; }
+.cover::before { content:''; position:absolute; inset:0; background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px); background-size:40px 40px; opacity:0.4; pointer-events:none; }
+.cover::after  { content:''; position:absolute; top:0; left:0; right:0; height:4px; background:var(--blue); }
+.cover-hdr { position:relative; z-index:1; padding:32px 56px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--rule); }
+.logo { display:flex; align-items:center; gap:12px; }
+.logo-wm  { font-family:var(--f-d); font-size:20px; font-weight:800; letter-spacing:3px; color:var(--ink); line-height:1; }
+.logo-wm .l { color:var(--blue); }
+.logo-sub { font-family:var(--f-m); font-size:8px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; margin-top:3px; }
+.hdr-r { text-align:right; }
+.hdr-type { font-family:var(--f-m); font-size:9px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+.hdr-date { font-family:var(--f-m); font-size:11px; color:var(--ink2); }
+.cover-hero { position:relative; z-index:1; padding:60px 56px 48px; display:grid; grid-template-columns:1fr auto; gap:48px; align-items:end; }
+.eyebrow { font-family:var(--f-m); font-size:9px; letter-spacing:3px; text-transform:uppercase; color:var(--blue); margin-bottom:16px; display:flex; align-items:center; gap:10px; }
+.eyebrow::before { content:''; display:inline-block; width:20px; height:2px; background:var(--blue); }
+.cover-title { font-family:var(--f-d); font-size:clamp(34px,5vw,50px); font-weight:800; color:var(--ink); line-height:1.08; letter-spacing:-1px; margin-bottom:20px; }
+.tgt-lbl { font-family:var(--f-m); font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; margin-bottom:5px; }
+.tgt     { font-family:var(--f-m); font-size:15px; color:var(--blue); font-weight:700; }
+.risk-card { background:var(--ink); color:var(--white); padding:28px 32px; min-width:190px; text-align:center; position:relative; }
+.risk-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+.rc-high::before   { background:var(--sev-h); } .rc-crit::before  { background:var(--sev-c); }
+.rc-med::before    { background:var(--sev-m); } .rc-low::before   { background:var(--sev-l); }
+.rc-lbl    { font-family:var(--f-m); font-size:8px; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,0.35); margin-bottom:10px; }
+.rc-score  { font-family:var(--f-d); font-size:60px; font-weight:800; color:var(--white); line-height:1; letter-spacing:-2px; }
+.rc-denom  { font-family:var(--f-m); font-size:12px; color:rgba(255,255,255,0.28); margin-top:2px; }
+.rc-verd   { margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.1); font-family:var(--f-d); font-size:14px; font-weight:700; letter-spacing:2px; text-transform:uppercase; }
+.rc-high .rc-verd { color:#FCA5A5; } .rc-crit .rc-verd { color:#C084FC; }
+.rc-med  .rc-verd { color:#FDB08A; } .rc-low  .rc-verd { color:#67E8F9; }
+.cover-meta { position:relative; z-index:1; display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--rule); }
+.cm { padding:18px 24px; border-right:1px solid var(--rule); }
+.cm:last-child { border-right:none; }
+.cm-lbl { font-family:var(--f-m); font-size:8px; letter-spacing:2.5px; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.cm-val { font-family:var(--f-d); font-size:13px; font-weight:700; color:var(--ink); }
+
+/* LAYOUT */
+.wrap { max-width:960px; margin:0 auto; padding:56px 56px 100px; }
+
+/* TOC */
+.toc { background:var(--white); border:1px solid var(--rule); border-left:4px solid var(--blue); padding:32px 36px; margin-bottom:60px; }
+.toc-ttl { font-family:var(--f-m); font-size:9px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:20px; }
+.toc-row { display:flex; justify-content:space-between; align-items:baseline; gap:12px; text-decoration:none; color:var(--ink); padding:10px 0; border-bottom:1px solid var(--rule); transition:color .15s; }
+.toc-row:last-child { border-bottom:none; }
+.toc-row:hover { color:var(--blue); }
+.toc-rt { font-family:var(--f-d); font-size:14px; font-weight:700; }
+.toc-rn { font-family:var(--f-m); font-size:9px; color:var(--muted); flex-shrink:0; }
+.toc-finds { padding:4px 0 2px 20px; }
+.toc-find { display:flex; justify-content:space-between; align-items:center; gap:10px; text-decoration:none; color:var(--body); padding:4px 0; font-size:12px; font-weight:300; border-bottom:1px dotted var(--rule); transition:color .15s; }
+.toc-find:last-child { border-bottom:none; }
+.toc-find:hover { color:var(--blue); }
+.tsev { font-family:var(--f-m); font-size:8.5px; font-weight:700; letter-spacing:1px; padding:2px 7px; flex-shrink:0; }
+.tc { background:var(--sev-c-lt); color:var(--sev-c); }
+.th { background:var(--sev-h-lt); color:var(--sev-h); }
+.tm { background:var(--sev-m-lt); color:var(--sev-m); }
+.tl { background:var(--sev-l-lt); color:var(--sev-l); }
+
+/* SECTION */
+.sec { margin-bottom:52px; }
+.sec-hdr { display:flex; align-items:center; gap:14px; margin-bottom:24px; padding-bottom:12px; border-bottom:2px solid var(--blue); }
+.sec-n { font-family:var(--f-m); font-size:10px; color:var(--blue); letter-spacing:2px; flex-shrink:0; }
+.sec-t { font-family:var(--f-d); font-size:21px; font-weight:800; color:var(--ink); letter-spacing:-0.3px; }
+
+/* RISK BANNER */
+.rb { display:grid; grid-template-columns:175px 1fr; border:1px solid var(--rule); margin-bottom:24px; overflow:hidden; }
+.rb-s { background:var(--ink); padding:24px 20px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; }
+.rb-s::after { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+.rb-s.hi::after { background:var(--sev-h); } .rb-s.cr::after { background:var(--sev-c); }
+.rb-s.md::after { background:var(--sev-m); } .rb-s.lo::after { background:var(--sev-l); }
+.rb-sl { font-family:var(--f-m); font-size:8px; letter-spacing:3px; color:rgba(255,255,255,0.3); text-transform:uppercase; margin-bottom:8px; }
+.rb-sn { font-family:var(--f-d); font-size:52px; font-weight:800; color:#fff; line-height:1; letter-spacing:-2px; }
+.rb-sd { font-family:var(--f-m); font-size:11px; color:rgba(255,255,255,0.25); }
+.rb-sv { font-family:var(--f-d); font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-top:8px; }
+.rb-sv.hi { color:#FCA5A5; } .rb-sv.cr { color:#C084FC; }
+.rb-sv.md { color:#FDB08A; } .rb-sv.lo { color:#67E8F9; }
+.rb-r { padding:24px 28px; background:var(--bg); border-left:1px solid var(--rule); display:flex; align-items:center; }
+.rb-cap { font-size:13px; color:var(--body); line-height:1.75; font-weight:300; }
+.rb-cap strong { color:var(--ink); font-weight:500; }
+
+/* STATS */
+.stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--rule); border:1px solid var(--rule); margin-bottom:24px; }
+.stat { background:var(--white); padding:18px 16px; text-align:center; }
+.stat-n { font-family:var(--f-d); font-size:36px; font-weight:800; line-height:1; letter-spacing:-1px; }
+.stat-l { font-family:var(--f-m); font-size:8px; letter-spacing:2px; color:var(--muted); margin-top:5px; text-transform:uppercase; }
+.s-b .stat-n { color:var(--blue); }   .s-c .stat-n { color:var(--sev-c); }
+.s-h .stat-n { color:var(--sev-h); }  .s-m .stat-n { color:var(--sev-m); }
+
+/* CHARTS */
+.ch2  { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule); border:1px solid var(--rule); margin-bottom:1px; }
+.ch2b { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule); border:1px solid var(--rule); margin-bottom:24px; }
+.chc  { background:var(--white); padding:22px; }
+.cht  { font-family:var(--f-m); font-size:8.5px; letter-spacing:2.5px; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
+
+/* TABLE */
+.dtbl { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:24px; }
+.dtbl th { background:var(--ink); color:#fff; padding:9px 14px; text-align:left; font-family:var(--f-m); font-size:9px; letter-spacing:2px; text-transform:uppercase; font-weight:400; }
+.dtbl td { padding:9px 14px; border-bottom:1px solid var(--rule); font-weight:300; color:var(--body); }
+.dtbl td:first-child { font-weight:500; color:var(--ink); }
+.dtbl tr:nth-child(even) td { background:var(--bg); }
+
+/* FRAMEWORK */
+.fw-g { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule); border:1px solid var(--rule); margin-bottom:24px; }
+.fw-c { background:var(--white); padding:22px; }
+.fw-h { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.fw-n { font-family:var(--f-d); font-size:14px; font-weight:700; color:var(--ink); }
+.fw-t { font-family:var(--f-m); font-size:8.5px; letter-spacing:1px; color:var(--blue); border:1px solid var(--blue-md); padding:2px 8px; background:var(--blue-lt); }
+.fw-rs { display:flex; flex-direction:column; gap:9px; }
+.fw-r  { display:flex; align-items:center; gap:10px; }
+.fw-id { font-family:var(--f-m); font-size:9px; color:var(--blue); width:80px; flex-shrink:0; }
+.fw-nm { font-size:11.5px; color:var(--ink2); flex:1; }
+.fw-bb { width:50px; height:4px; background:var(--rule); border-radius:2px; flex-shrink:0; }
+.fw-b  { height:100%; border-radius:2px; background:var(--blue); }
+.fw-b.hi { background:var(--sev-h); } .fw-b.md { background:var(--sev-m); }
+
+/* BADGES */
+.badge { display:inline-block; padding:3px 9px; font-family:var(--f-m); font-size:9px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+.badge-critical { background:var(--sev-c-lt); color:var(--sev-c); border:1px solid var(--sev-c-bd); }
+.badge-high     { background:var(--sev-h-lt); color:var(--sev-h); border:1px solid var(--sev-h-bd); }
+.badge-medium   { background:var(--sev-m-lt); color:var(--sev-m); border:1px solid var(--sev-m-bd); }
+.badge-low      { background:var(--sev-l-lt); color:var(--sev-l); border:1px solid var(--sev-l-bd); }
+
+/* FINDINGS */
+.finding { background:var(--white); border:1px solid var(--rule); margin:14px 0; overflow:hidden; }
+.fhdr    { padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; gap:14px; border-bottom:1px solid var(--rule); background:var(--bg); }
+.fhdr.fc { border-left:4px solid var(--sev-c); }
+.fhdr.fh { border-left:4px solid var(--sev-h); }
+.fhdr.fm { border-left:4px solid var(--sev-m); }
+.fhdr.fl { border-left:4px solid var(--sev-l); }
+.f-num   { font-family:var(--f-m); font-size:8.5px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; margin-bottom:3px; }
+.f-ttl   { font-family:var(--f-d); font-size:16px; font-weight:700; color:var(--ink); }
+.f-refs  { display:flex; flex-wrap:wrap; gap:12px; margin-top:6px; }
+.f-ref   { font-family:var(--f-m); font-size:9px; }
+.f-ref .rk { color:var(--muted); }
+.f-ref .rv { color:var(--blue); font-weight:700; }
+.f-body  { padding:18px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.f-body.w { grid-template-columns:1fr; }
+.f-fld label { display:block; font-family:var(--f-m); font-size:8px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+.f-fld p { font-size:12px; color:var(--body); line-height:1.7; font-weight:300; }
+.code { background:var(--ink); color:rgba(255,255,255,0.78); padding:12px 14px; font-family:var(--f-m); font-size:10px; line-height:1.7; white-space:pre-wrap; overflow-wrap:break-word; }
+.remed { background:var(--blue-lt); border-left:3px solid var(--blue); padding:11px 14px; font-size:12px; color:var(--ink2); line-height:1.7; font-weight:300; }
+
+/* MODULES */
+.mod-list { display:flex; flex-direction:column; gap:3px; margin-top:16px; }
+.mod-row  { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--white); border:1px solid var(--rule); }
+.mod-dot  { width:6px; height:6px; border-radius:50%; background:var(--blue); flex-shrink:0; }
+.mod-nm   { font-family:var(--f-d); font-size:13px; font-weight:700; color:var(--ink); flex:1; }
+.mod-ref  { font-family:var(--f-m); font-size:9px; color:var(--blue); }
+
+/* METH */
+.meth-g { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule); border:1px solid var(--rule); margin-bottom:16px; }
+.meth-c { background:var(--white); padding:20px 22px; }
+.meth-t { font-family:var(--f-d); font-size:13px; font-weight:700; color:var(--ink); margin-bottom:7px; }
+.meth-b { font-size:12px; color:var(--body); line-height:1.75; font-weight:300; }
+.scope-c { background:var(--white); border:1px solid var(--rule); padding:20px 22px; }
+
+/* FOOTER */
+.foot { margin-top:72px; padding-top:14px; border-top:2px solid var(--rule); display:flex; justify-content:space-between; align-items:center; font-family:var(--f-m); font-size:9px; color:var(--muted); }
+.foot-l { display:flex; align-items:center; gap:10px; }
+.foot-wm { font-family:var(--f-d); font-size:13px; font-weight:800; letter-spacing:2px; color:var(--ink); }
+.foot-wm .l { color:var(--blue); }
+</style>
+</head>
+<body>
+
+{% set score = campaign.risk_score or 0 %}
+{% set risk_cls = 'cr' if score >= 9 else 'hi' if score >= 7 else 'md' if score >= 4 else 'lo' %}
+{% set risk_lbl = 'Critical Risk' if score >= 9 else 'High Risk' if score >= 7 else 'Medium Risk' if score >= 4 else 'Low Risk' %}
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-hdr">
+    <div class="logo">
+      <svg width="30" height="30" viewBox="0 0 48 48" fill="none">
+        <polygon points="4,24 38,12 44,24 38,36" fill="#1050D0" opacity="0.15"/>
+        <polygon points="4,24 38,12 44,24 38,36" fill="none" stroke="#1050D0" stroke-width="2"/>
+        <line x1="4" y1="24" x2="44" y2="24" stroke="#1050D0" stroke-width="1.2" opacity="0.45"/>
+        <circle cx="44" cy="24" r="3" fill="#1050D0"/>
+        <circle cx="4"  cy="24" r="2" fill="#8B8FA8"/>
+      </svg>
+      <div>
+        <div class="logo-wm"><span class="l">L</span>ANCE</div>
+        <div class="logo-sub">LLM Adversarial Neural Component Evaluator</div>
+      </div>
+    </div>
+    <div class="hdr-r">
+      <div class="hdr-type">Security Assessment Report</div>
+      <div class="hdr-date">{{ campaign.completed_at.strftime('%d %B %Y') if campaign.completed_at else 'In Progress' }}</div>
+    </div>
+  </div>
+
+  <div class="cover-hero">
+    <div>
+      <div class="eyebrow">Red Team Evaluation</div>
+      <div class="cover-title">LLM Security<br>Assessment</div>
+      <div class="tgt-lbl">Target Model</div>
+      <div class="tgt">{{ campaign.target_model }}</div>
+    </div>
+    <div class="risk-card rc-{{ risk_cls }}">
+      <div class="rc-lbl">Overall Risk Score</div>
+      <div class="rc-score">{{ "%.1f"|format(score) }}</div>
+      <div class="rc-denom">out of 10</div>
+      <div class="rc-verd">{{ risk_lbl }}</div>
+    </div>
+  </div>
+
+  <div class="cover-meta">
+    <div class="cm"><div class="cm-lbl">Campaign</div><div class="cm-val">{{ campaign.name }}</div></div>
+    <div class="cm"><div class="cm-lbl">Organisation</div><div class="cm-val">{{ org_name }}</div></div>
+    <div class="cm"><div class="cm-lbl">Framework</div><div class="cm-val">{{ tool_url }}</div></div>
+  </div>
+</div>
+
+<!-- BODY -->
+<div class="wrap">
+
+<!-- TOC -->
+<div class="toc">
+  <div class="toc-ttl">Contents</div>
+  <a href="#s-exec" class="toc-row"><span class="toc-rt">01 — Executive Summary</span><span class="toc-rn">↓</span></a>
+  <a href="#s-fw" class="toc-row"><span class="toc-rt">02 — Framework Mapping</span><span class="toc-rn">↓</span></a>
+  <div>
+    <a href="#s-find" class="toc-row">
+      <span class="toc-rt">03 — Findings
+        <span style="color:var(--muted);font-size:11px;font-family:var(--f-m);font-weight:400">
+          ({{ findings|length }} total{% if severity_counts.critical %} · {{ severity_counts.critical }} Critical{% endif %}{% if severity_counts.high %} · {{ severity_counts.high }} High{% endif %}{% if severity_counts.medium %} · {{ severity_counts.medium }} Medium{% endif %}{% if severity_counts.low %} · {{ severity_counts.low }} Low{% endif %})
+        </span>
+      </span>
+      <span class="toc-rn">↓</span>
+    </a>
+    <div class="toc-finds">
+      {% for f in findings %}
+      <a href="#f{{ loop.index }}" class="toc-find">
+        <span>F-{{ "%02d"|format(loop.index) }} &nbsp; {{ f.title | e }}</span>
+        <span class="tsev t{{ f.severity.value[0] }}">{{ f.severity.value | upper }} · {{ f.cvss_score or '—' }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  <a href="#s-meth" class="toc-row"><span class="toc-rt">04 — Methodology</span><span class="toc-rn">↓</span></a>
+  <a href="#s-scope" class="toc-row" style="border-bottom:none"><span class="toc-rt">05 — Scope &amp; Limitations</span><span class="toc-rn">↓</span></a>
+</div>
+
+<!-- 01 EXEC -->
+<div class="sec" id="s-exec">
+  <div class="sec-hdr"><span class="sec-n">01</span><span class="sec-t">Executive Summary</span></div>
+
+  <div class="rb">
+    <div class="rb-s {{ risk_cls }}">
+      <div class="rb-sl">Risk Score</div>
+      <div class="rb-sn">{{ "%.1f"|format(score) }}</div>
+      <div class="rb-sd">/ 10</div>
+      <div class="rb-sv {{ risk_cls }}">{{ risk_lbl }}</div>
+    </div>
+    <div class="rb-r">
+      <div class="rb-cap">
+        {% if score >= 9 %}<strong>Critical risk confirmed.</strong>
+        {% elif score >= 7 %}<strong>High risk confirmed.</strong>
+        {% elif score >= 4 %}<strong>Medium risk identified.</strong>
+        {% else %}<strong>Low risk — model showed good resistance.</strong>{% endif %}
+        The model {{ campaign.target_model }} was assessed across {{ campaign.attack_modules | length }} attack module{{ 's' if campaign.attack_modules|length != 1 else '' }}
+        with {{ campaign.total_probes }} probes fired.
+        {{ findings | length }} confirmed finding{{ 's' if findings|length != 1 else '' }} identified
+        {% if severity_counts.critical %} — {{ severity_counts.critical }} Critical{% endif %}
+        {% if severity_counts.high %}, {{ severity_counts.high }} High{% endif %}
+        {% if severity_counts.medium %}, {{ severity_counts.medium }} Medium{% endif %}
+        {% if severity_counts.low %}, {{ severity_counts.low }} Low{% endif %}.
+        {% if score >= 7 %}Immediate remediation recommended before production deployment.{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat s-b"><div class="stat-n">{{ campaign.total_probes }}</div><div class="stat-l">Total Probes</div></div>
+    <div class="stat s-c"><div class="stat-n">{{ severity_counts.critical }}</div><div class="stat-l">Critical</div></div>
+    <div class="stat s-h"><div class="stat-n">{{ severity_counts.high }}</div><div class="stat-l">High</div></div>
+    <div class="stat s-m"><div class="stat-n">{{ severity_counts.medium }}</div><div class="stat-l">Medium</div></div>
+  </div>
+
+  <div class="ch2">
+    <div class="chc"><div class="cht">Severity Distribution</div><div style="height:200px;position:relative"><canvas id="cSev"></canvas></div></div>
+    <div class="chc"><div class="cht">Attack Success by Module</div><div style="height:200px;position:relative"><canvas id="cMod"></canvas></div></div>
+  </div>
+  <div class="ch2b">
+    <div class="chc"><div class="cht">Probe Outcomes</div><div style="height:185px;position:relative"><canvas id="cOut"></canvas></div></div>
+    <div class="chc"><div class="cht">OWASP LLM Top 10 Exposure</div><div style="height:185px;position:relative;display:flex;justify-content:center"><canvas id="cRadar" style="max-width:320px"></canvas></div></div>
+  </div>
+
+  <table class="dtbl">
+    <tr><th>Parameter</th><th>Value</th></tr>
+    <tr><td>Target Model</td><td>{{ campaign.target_model }}</td></tr>
+    <tr><td>Attack Modules</td><td>{{ campaign.attack_modules | map('replace', '_', ' ') | map('title') | join(', ') }}</td></tr>
+    <tr><td>Total Probes Fired</td><td>{{ campaign.total_probes }}</td></tr>
+    <tr><td>Successful Attacks</td><td>{{ campaign.successful_attacks }} of {{ campaign.total_probes }} ({{ "%.0f"|format(campaign.successful_attacks / campaign.total_probes * 100 if campaign.total_probes else 0) }}%)</td></tr>
+    <tr><td>Campaign Duration</td><td>{% if campaign.started_at and campaign.completed_at %}{{ ((campaign.completed_at - campaign.started_at).seconds) }}s{% else %}—{% endif %}</td></tr>
+    <tr><td>Report Generated</td><td>{{ campaign.completed_at.strftime('%Y-%m-%d %H:%M UTC') if campaign.completed_at else 'In Progress' }}</td></tr>
+  </table>
+</div>
+
+<!-- 02 FRAMEWORK -->
+<div class="sec" id="s-fw">
+  <div class="sec-hdr"><span class="sec-n">02</span><span class="sec-t">Framework Mapping</span></div>
+  <div class="fw-g">
+    <div class="fw-c">
+      <div class="fw-h"><span class="fw-n">OWASP LLM Top 10</span><span class="fw-t">2025</span></div>
+      <div class="fw-rs">
+        {% set owasp_map = [('LLM01','Prompt Injection'),('LLM02','Insecure Output Handling'),('LLM03','Training Data Poisoning'),('LLM04','Model Denial of Service'),('LLM06','Sensitive Info Disclosure')] %}
+        {% set owasp_refs = findings | map(attribute='owasp_ref') | select | list %}
+        {% for id, name in owasp_map %}
+        {% set cnt = owasp_refs | select('equalto', id) | list | length %}
+        <div class="fw-r">
+          <span class="fw-id">{{ id }}</span><span class="fw-nm">{{ name }}</span>
+          <div class="fw-bb"><div class="fw-b {{ 'hi' if cnt > 1 else 'md' if cnt == 1 else '' }}" style="width:{{ [cnt * 35, 95] | min if cnt else 6 }}%"></div></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="fw-c">
+      <div class="fw-h"><span class="fw-n">MITRE ATLAS</span><span class="fw-t">v4.5</span></div>
+      <div class="fw-rs">
+        {% set mitre_map = [('AML.T0051','LLM Prompt Injection'),('AML.T0054','Jailbreak ML Model'),('AML.T0024','Exfiltration via Inference'),('AML.T0020','Poison Training Data'),('AML.T0016','Obtain Capabilities')] %}
+        {% set mitre_refs = findings | map(attribute='mitre_atlas_ref') | select | list %}
+        {% for id, name in mitre_map %}
+        {% set cnt = mitre_refs | select('equalto', id) | list | length %}
+        <div class="fw-r">
+          <span class="fw-id">{{ id }}</span><span class="fw-nm">{{ name }}</span>
+          <div class="fw-bb"><div class="fw-b {{ 'hi' if cnt > 1 else 'md' if cnt == 1 else '' }}" style="width:{{ [cnt * 35, 95] | min if cnt else 6 }}%"></div></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 03 FINDINGS -->
+<div class="sec" id="s-find">
+  <div class="sec-hdr"><span class="sec-n">03</span><span class="sec-t">Findings</span></div>
+
+  {% if not findings %}
+  <div class="scope-c"><div class="meth-b" style="color:#1A7A44">No confirmed findings — model demonstrated good resistance to all tested attack vectors.</div></div>
+  {% endif %}
+
+  {% for f in findings %}
+  <div class="finding" id="f{{ loop.index }}">
+    <div class="fhdr f{{ f.severity.value[0] }}">
+      <div>
+        <div class="f-num">F-{{ "%02d"|format(loop.index) }} of {{ "%02d"|format(findings|length) }}{% if f.attack_module %} &nbsp;·&nbsp; {{ f.attack_module | replace('_',' ') | title }}{% endif %}</div>
+        <div class="f-ttl">{{ f.title | e }}</div>
+        <div class="f-refs">
+          <span class="f-ref"><span class="rk">OWASP </span><span class="rv">{{ f.owasp_ref | e if f.owasp_ref else '—' }}</span></span>
+          <span class="f-ref"><span class="rk">MITRE </span><span class="rv">{{ f.mitre_atlas_ref | e if f.mitre_atlas_ref else '—' }}</span></span>
+          <span class="f-ref"><span class="rk">CVSS </span><span class="rv">{{ f.cvss_score or '—' }}</span></span>
+        </div>
+      </div>
+      <span class="badge badge-{{ f.severity.value }}">{{ f.severity.value | upper }}</span>
+    </div>
+    <div class="f-body">
+      <div class="f-fld"><label>Description</label><p>{{ f.description | e }}</p></div>
+      <div class="f-fld"><label>Attack Payload</label><div class="code">{{ f.evidence_payload[:600] | e }}</div></div>
+      <div class="f-fld"><label>Model Response</label><div class="code">{{ f.evidence_response[:600] | e }}</div></div>
+      {% if f.remediation %}
+      <div class="f-fld"><label>Remediation</label><div class="remed">{{ f.remediation | e }}</div></div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- 04 METHODOLOGY -->
+<div class="sec" id="s-meth">
+  <div class="sec-hdr"><span class="sec-n">04</span><span class="sec-t">Methodology</span></div>
+  <div class="meth-g">
+    <div class="meth-c"><div class="meth-t">Scoring Architecture</div><div class="meth-b">Two-pass evaluation: heuristic pre-screen followed by LLM-as-Judge with module-specific prompts. A finding is confirmed when judge confidence exceeds 72%. Risk scores are severity-weighted on a CVSS-aligned 0–10 scale.</div></div>
+    <div class="meth-c"><div class="meth-t">Probe Generation</div><div class="meth-b">Each seed payload is mutated across 5 variant strategies: direct, role-play wrapper, hypothetical framing, base64 encoding, and indirect injection — testing multiple evasion angles per attack type.</div></div>
+  </div>
+  <div class="mod-list">
+    {% for module in campaign.attack_modules %}
+    <div class="mod-row">
+      <div class="mod-dot"></div>
+      <div class="mod-nm">{{ module | replace('_', ' ') | title }}</div>
+      <div class="mod-ref">{{ module | upper }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- 05 SCOPE -->
+<div class="sec" id="s-scope">
+  <div class="sec-hdr"><span class="sec-n">05</span><span class="sec-t">Scope &amp; Limitations</span></div>
+  <div class="scope-c"><div class="meth-b">This assessment is scoped to automated prompt-based testing using the LANCE framework v0.4.0. It does not cover infrastructure security, model training data attacks, physical access vectors, or social engineering of operators. Results represent the model's behaviour at time of testing and may vary with model updates or system prompt changes. All findings should be independently verified before remediation prioritisation.</div></div>
+</div>
+
+<!-- FOOTER -->
+<div class="foot">
+  <div class="foot-l">
+    <svg width="14" height="14" viewBox="0 0 48 48" fill="none"><polygon points="4,24 38,12 44,24 38,36" fill="none" stroke="#1050D0" stroke-width="2"/><circle cx="44" cy="24" r="3" fill="#1050D0"/></svg>
+    <span class="foot-wm"><span class="l">L</span>ANCE</span>
+    <span style="margin-left:4px">· {{ tool_url }} · {{ org_name }}</span>
+  </div>
+  <span>{{ campaign.completed_at.strftime('%Y-%m-%d %H:%M UTC') if campaign.completed_at else 'In Progress' }} &nbsp;·&nbsp; {{ campaign.id[:8] }}</span>
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+(function(){
+  const mono = "'Space Mono', monospace";
+  Chart.defaults.font.family = mono;
+  Chart.defaults.font.size   = 10;
+  Chart.defaults.color       = '#8B8FA8';
+  const grid = 'rgba(226,228,238,0.8)';
+
+  // All data computed server-side and passed as clean JSON — no Jinja in JS
+  const d = {{ chart_data_json }};
+
+  // Severity distribution — doughnut
+  new Chart(document.getElementById('cSev'), {
+    type: 'doughnut',
+    data: {
+      labels: d.severity.labels,
+      datasets: [{ data: d.severity.data, backgroundColor: d.severity.colors, borderWidth: 0, hoverOffset: 5 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: { legend: { position: 'right', labels: { padding: 14, boxWidth: 10, font: { family: mono, size: 10 } } } }
+    }
+  });
+
+  // Attack success by module — horizontal bar
+  new Chart(document.getElementById('cMod'), {
+    type: 'bar',
+    data: {
+      labels: d.modules.labels,
+      datasets: [
+        { label: 'Hits',    data: d.modules.hits,    backgroundColor: '#DC2626', borderWidth: 0, borderRadius: 2 },
+        { label: 'Blocked', data: d.modules.blocked, backgroundColor: '#0E7490', borderWidth: 0, borderRadius: 2 }
+      ]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: grid }, ticks: { font: { family: mono, size: 9 } } },
+        y: { grid: { display: false }, ticks: { font: { family: mono, size: 9 } } }
+      },
+      plugins: { legend: { labels: { padding: 12, boxWidth: 10, font: { family: mono, size: 10 } } } }
+    }
+  });
+
+  // Probe outcomes — doughnut
+  new Chart(document.getElementById('cOut'), {
+    type: 'doughnut',
+    data: {
+      labels: d.outcomes.labels,
+      datasets: [{ data: d.outcomes.data, backgroundColor: d.outcomes.colors, borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '55%',
+      plugins: { legend: { position: 'right', labels: { padding: 10, boxWidth: 10, font: { family: mono, size: 10 } } } }
+    }
+  });
+
+  // OWASP radar
+  new Chart(document.getElementById('cRadar'), {
+    type: 'radar',
+    data: {
+      labels: d.radar.labels,
+      datasets: [
+        {
+          label: 'This Scan',
+          data: d.radar.this_scan,
+          borderColor: '#1050D0', backgroundColor: 'rgba(16,80,208,0.1)',
+          borderWidth: 2, pointBackgroundColor: '#1050D0', pointRadius: 3
+        },
+        {
+          label: 'Industry Avg',
+          data: d.radar.industry_avg,
+          borderColor: 'rgba(139,143,168,0.4)', backgroundColor: 'rgba(139,143,168,0.04)',
+          borderWidth: 1, borderDash: [4, 4], pointBackgroundColor: '#8B8FA8', pointRadius: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { r: {
+        min: 0, max: 10,
+        grid: { color: grid }, angleLines: { color: grid },
+        pointLabels: { font: { family: mono, size: 9 }, color: '#8B8FA8' },
+        ticks: { display: false }
+      }},
+      plugins: { legend: { labels: { padding: 14, boxWidth: 10, font: { family: mono, size: 10 } } } }
+    }
+  });
+})();
+</script>
+</body>
+</html>

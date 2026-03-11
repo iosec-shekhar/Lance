@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LANCE Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --void: #080A08; --surface: #131713; --surface2: #1A201A; --border: rgba(255,255,255,0.07);
+    --venom: #7FFF00; --venom-dim: #4A9900; --bone: #E8E0D0; --muted: #5A6B5A;
+    --danger: #FF3A1A; --amber: #FFB800; --blue: #4D9EFF;
+    --mono: 'IBM Plex Mono', monospace; --display: 'Archivo Black', sans-serif; --body: 'Instrument Serif', serif;
+  }
+  body { background: var(--void); color: var(--bone); font-family: var(--body); font-size: 14px; min-height: 100vh; }
+  * { scrollbar-width: thin; scrollbar-color: var(--surface2) transparent; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 0; display: flex; flex-direction: column; }
+  .sidebar-logo { padding: 24px 20px 20px; border-bottom: 1px solid var(--border); }
+  .logo-text { font-family: var(--display); font-size: 28px; letter-spacing: -1px; }
+  .logo-text .k { color: var(--venom); }
+  .logo-sub { font-family: var(--mono); font-size: 8px; letter-spacing: 2px; color: var(--muted); margin-top: 3px; }
+  .nav-items { padding: 12px 0; flex: 1; }
+  .nav-item { padding: 10px 20px; font-family: var(--mono); font-size: 11px; letter-spacing: 1px; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.15s; border-left: 2px solid transparent; }
+  .nav-item:hover { color: var(--bone); background: rgba(255,255,255,0.03); }
+  .nav-item.active { color: var(--venom); border-left-color: var(--venom); background: rgba(127,255,0,0.05); }
+  .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 9px; color: var(--muted); }
+
+  /* Main */
+  .main { overflow-y: auto; }
+  .topbar { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .page-title { font-family: var(--display); font-size: 22px; letter-spacing: -0.5px; }
+  .content { padding: 28px 32px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card-label { font-family: var(--mono); font-size: 9px; letter-spacing: 3px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .stat-num { font-family: var(--display); font-size: 36px; line-height: 1; margin-bottom: 4px; }
+  .stat-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--muted); }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--muted); padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; }
+  tr:hover td { background: rgba(127,255,0,0.02); }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-family: var(--mono); font-size: 9px; letter-spacing: 1px; }
+  .badge-critical { background: rgba(255,58,26,0.2); color: #FF6B4A; border: 1px solid rgba(255,58,26,0.3); }
+  .badge-high { background: rgba(255,184,0,0.15); color: var(--amber); border: 1px solid rgba(255,184,0,0.3); }
+  .badge-medium { background: rgba(77,158,255,0.15); color: var(--blue); border: 1px solid rgba(77,158,255,0.3); }
+  .badge-low { background: rgba(127,255,0,0.1); color: var(--venom-dim); border: 1px solid rgba(127,255,0,0.2); }
+  .badge-completed { background: rgba(127,255,0,0.1); color: var(--venom); border: 1px solid rgba(127,255,0,0.2); }
+  .badge-running { background: rgba(255,184,0,0.15); color: var(--amber); border: 1px solid rgba(255,184,0,0.3); }
+  .badge-pending { background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid var(--border); }
+  .badge-failed { background: rgba(255,58,26,0.15); color: var(--danger); border: 1px solid rgba(255,58,26,0.3); }
+
+  /* Buttons */
+  .btn { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; padding: 8px 16px; border-radius: 5px; border: none; cursor: pointer; transition: all 0.15s; }
+  .btn-primary { background: var(--venom); color: var(--void); font-weight: 600; }
+  .btn-primary:hover { background: #90FF10; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--bone); border-color: rgba(255,255,255,0.2); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(255,58,26,0.3); }
+  .btn-danger:hover { background: rgba(255,58,26,0.1); }
+
+  /* Form */
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; color: var(--muted); display: block; margin-bottom: 6px; }
+  .form-input { width: 100%; background: var(--void); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--bone); font-family: var(--mono); font-size: 12px; outline: none; transition: border-color 0.15s; }
+  .form-input:focus { border-color: rgba(127,255,0,0.4); }
+  .form-select { width: 100%; background: var(--void); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--bone); font-family: var(--mono); font-size: 12px; outline: none; }
+  .form-textarea { width: 100%; background: var(--void); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--bone); font-family: var(--mono); font-size: 11px; outline: none; resize: vertical; min-height: 80px; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 500px; max-height: 80vh; overflow-y: auto; }
+  .modal-title { font-family: var(--display); font-size: 20px; margin-bottom: 20px; }
+
+  /* Progress */
+  .progress-track { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; margin: 8px 0; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--venom-dim), var(--venom)); border-radius: 2px; transition: width 0.3s; }
+
+  /* Code block */
+  .code { background: var(--void); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: var(--mono); font-size: 10.5px; color: var(--venom); line-height: 1.7; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+
+  /* Finding detail */
+  .finding-card { background: var(--surface); border: 1px solid rgba(255,58,26,0.15); border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+  .finding-card.severity-high { border-color: rgba(255,184,0,0.2); }
+  .finding-card.severity-medium { border-color: rgba(77,158,255,0.2); }
+  .finding-card.severity-low { border-color: rgba(127,255,0,0.15); }
+  .finding-title { font-family: var(--mono); font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .finding-meta { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-bottom: 12px; display: flex; gap: 16px; }
+  .finding-section-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--muted); margin: 12px 0 6px; }
+  .remediation-box { background: rgba(127,255,0,0.05); border-left: 2px solid var(--venom-dim); border-radius: 0 6px 6px 0; padding: 10px 14px; font-size: 12px; color: rgba(232,224,208,0.8); }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 60px 20px; }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+  .empty-title { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .empty-sub { font-size: 12px; color: var(--muted); opacity: 0.7; }
+
+  .spinner { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.3s ease both; }
+
+  .risk-chip { font-family: var(--mono); font-size: 14px; font-weight: 600; padding: 3px 10px; border-radius: 4px; }
+  .risk-critical { color: var(--danger); }
+  .risk-high { color: var(--amber); }
+  .risk-low { color: var(--venom); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const API = 'http://localhost:8000/api';
+
+async function api(path, opts = {}) {
+  try {
+    const r = await fetch(API + path, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    return await r.json();
+  } catch (e) {
+    console.error(path, e);
+    return null;
+  }
+}
+
+// ── Stat Card ──────────────────────────────────────────────────────────────
+function StatCard({ num, label, color }) {
+  return (
+    <div className="stat-card">
+      <div className="stat-num" style={{ color }}>{num ?? '—'}</div>
+      <div className="stat-label">{label}</div>
+    </div>
+  );
+}
+
+// ── Home / Dashboard ───────────────────────────────────────────────────────
+function Home({ onNav }) {
+  const [stats, setStats] = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
+
+  useEffect(() => {
+    api('/findings/stats').then(setStats);
+    api('/campaigns/?limit=5').then(d => d && setCampaigns(d));
+  }, []);
+
+  return (
+    <div className="fade-in">
+      <div className="stats-row">
+        <StatCard num={stats?.total_campaigns} label="CAMPAIGNS" color="var(--bone)" />
+        <StatCard num={stats?.total_probes} label="TOTAL PROBES" color="var(--blue)" />
+        <StatCard num={stats?.critical_findings} label="CRITICAL FINDINGS" color="var(--danger)" />
+        <StatCard num={stats?.avg_risk_score != null ? `${stats.avg_risk_score}/10` : '—'} label="AVG RISK SCORE" color="var(--amber)" />
+      </div>
+
+      <div className="card">
+        <div className="card-label">Recent Campaigns</div>
+        {campaigns.length === 0 ? (
+          <div className="empty">
+            <div className="empty-icon">🐍</div>
+            <div className="empty-title">No campaigns yet</div>
+            <div className="empty-sub">Run your first scan to see results here</div>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>NAME</th><th>MODEL</th><th>STATUS</th><th>FINDINGS</th><th>RISK</th></tr></thead>
+              <tbody>
+                {campaigns.map(c => (
+                  <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => onNav('campaigns')}>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{c.name}</td>
+                    <td style={{ color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 10 }}>{c.target_model}</td>
+                    <td><span className={`badge badge-${c.status}`}>{c.status}</span></td>
+                    <td style={{ color: c.successful_attacks > 0 ? 'var(--danger)' : 'var(--muted)' }}>{c.successful_attacks}</td>
+                    <td>
+                      <span className={`risk-chip ${(c.risk_score || 0) >= 7 ? 'risk-critical' : (c.risk_score || 0) >= 4 ? 'risk-high' : 'risk-low'}`}>
+                        {c.risk_score ?? '—'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── New Campaign Modal ──────────────────────────────────────────────────────
+function NewCampaignModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({
+    name: '', target_model: 'openai/gpt-4o', target_system_prompt: '',
+    attack_modules: ['prompt_injection'],
+  });
+  const [loading, setLoading] = useState(false);
+
+  const models = [
+    'openai/gpt-4o', 'openai/gpt-4-turbo', 'openai/gpt-3.5-turbo',
+    'anthropic/claude-sonnet-4-6', 'anthropic/claude-haiku-4-5-20251001',
+    'ollama/llama3', 'ollama/mistral', 'ollama/phi3',
+  ];
+
+  async function submit() {
+    if (!form.name || !form.target_model) return;
+    setLoading(true);
+    const created = await api('/campaigns/', {
+      method: 'POST',
+      body: JSON.stringify(form),
+    });
+    setLoading(false);
+    if (created) {
+      onCreated(created);
+      onClose();
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-title">🎯 New Campaign</div>
+        <div className="form-group">
+          <label className="form-label">CAMPAIGN NAME</label>
+          <input className="form-input" placeholder="e.g. GPT-4o Prompt Injection Test"
+            value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">TARGET MODEL</label>
+          <select className="form-select" value={form.target_model}
+            onChange={e => setForm({ ...form, target_model: e.target.value })}>
+            {models.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">SYSTEM PROMPT (optional — paste the system prompt you're testing against)</label>
+          <textarea className="form-textarea" placeholder="You are a helpful assistant..."
+            value={form.target_system_prompt}
+            onChange={e => setForm({ ...form, target_system_prompt: e.target.value })} />
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={submit} disabled={loading}>
+            {loading ? '⏳ Creating...' : '+ Create Campaign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Campaigns Page ──────────────────────────────────────────────────────────
+function CampaignsPage() {
+  const [campaigns, setCampaigns] = useState([]);
+  const [showNew, setShowNew] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [progress, setProgress] = useState({});
+
+  const load = useCallback(() => {
+    api('/campaigns/').then(d => d && setCampaigns(d));
+  }, []);
+
+  useEffect(() => { load(); }, []);
+
+  // Poll progress for running campaigns
+  useEffect(() => {
+    const running = campaigns.filter(c => c.status === 'running');
+    if (!running.length) return;
+    const interval = setInterval(async () => {
+      for (const c of running) {
+        const p = await api(`/campaigns/${c.id}/progress`);
+        if (p) setProgress(prev => ({ ...prev, [c.id]: p }));
+      }
+      load();
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [campaigns]);
+
+  async function startCampaign(id) {
+    await api(`/campaigns/${id}/run`, { method: 'POST' });
+    load();
+  }
+
+  async function deleteCampaign(id) {
+    if (!confirm('Delete this campaign and all its data?')) return;
+    await api(`/campaigns/${id}`, { method: 'DELETE' });
+    load();
+    if (selected?.id === id) setSelected(null);
+  }
+
+  return (
+    <div className="fade-in">
+      {showNew && <NewCampaignModal onClose={() => setShowNew(false)} onCreated={load} />}
+
+      <div style={{ display: 'flex', gap: 14 }}>
+        {/* Campaign list */}
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: 2 }}>
+              {campaigns.length} CAMPAIGNS
+            </div>
+            <button className="btn btn-primary" onClick={() => setShowNew(true)}>+ NEW CAMPAIGN</button>
+          </div>
+
+          {campaigns.length === 0 ? (
+            <div className="card empty">
+              <div className="empty-icon">🐍</div>
+              <div className="empty-title">No campaigns yet</div>
+              <div className="empty-sub">Create a campaign and run a scan</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {campaigns.map(c => (
+                <div key={c.id} className="card" style={{ cursor: 'pointer', borderColor: selected?.id === c.id ? 'rgba(127,255,0,0.3)' : undefined }}
+                  onClick={() => setSelected(c)}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 12, marginBottom: 4 }}>{c.name}</div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>{c.target_model}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className={`badge badge-${c.status}`}>{c.status}</span>
+                      {c.risk_score != null && (
+                        <span className={`risk-chip ${c.risk_score >= 7 ? 'risk-critical' : c.risk_score >= 4 ? 'risk-high' : 'risk-low'}`}>
+                          {c.risk_score}/10
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress bar for running */}
+                  {c.status === 'running' && progress[c.id]?.progress && (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{
+                          width: `${Math.round((progress[c.id].progress.current / Math.max(progress[c.id].progress.total, 1)) * 100)}%`
+                        }} />
+                      </div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 4 }}>
+                        {progress[c.id].progress.message}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    {c.status === 'pending' && (
+                      <button className="btn btn-primary" style={{ fontSize: 10, padding: '5px 12px' }}
+                        onClick={e => { e.stopPropagation(); startCampaign(c.id); }}>
+                        ▶ RUN
+                      </button>
+                    )}
+                    {c.status === 'completed' && (
+                      <button className="btn btn-ghost" style={{ fontSize: 10, padding: '5px 12px' }}
+                        onClick={e => { e.stopPropagation(); window.open(`http://localhost:8000/api/reports/${c.id}/html`, '_blank'); }}>
+                        📄 REPORT
+                      </button>
+                    )}
+                    <button className="btn btn-danger" style={{ fontSize: 10, padding: '5px 12px' }}
+                      onClick={e => { e.stopPropagation(); deleteCampaign(c.id); }}>
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Campaign detail panel */}
+        {selected && <CampaignDetail campaignId={selected.id} onClose={() => setSelected(null)} />}
+      </div>
+    </div>
+  );
+}
+
+// ── Campaign Detail ─────────────────────────────────────────────────────────
+function CampaignDetail({ campaignId, onClose }) {
+  const [campaign, setCampaign] = useState(null);
+  const [findings, setFindings] = useState([]);
+
+  useEffect(() => {
+    api(`/campaigns/${campaignId}`).then(setCampaign);
+    api(`/findings/?campaign_id=${campaignId}`).then(d => d && setFindings(d));
+  }, [campaignId]);
+
+  if (!campaign) return null;
+
+  return (
+    <div style={{ width: 420, flexShrink: 0 }}>
+      <div className="card" style={{ position: 'sticky', top: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div className="card-label">CAMPAIGN DETAIL</div>
+          <button className="btn btn-ghost" style={{ fontSize: 10, padding: '3px 8px' }} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 12, marginBottom: 4 }}>{campaign.name}</div>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', marginBottom: 16 }}>{campaign.target_model}</div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          {[
+            ['PROBES', campaign.total_probes, 'var(--bone)'],
+            ['HITS', campaign.successful_attacks, 'var(--danger)'],
+            ['RISK', `${campaign.risk_score ?? '—'}/10`, campaign.risk_score >= 7 ? 'var(--danger)' : campaign.risk_score >= 4 ? 'var(--amber)' : 'var(--venom)'],
+            ['STATUS', campaign.status, 'var(--muted)'],
+          ].map(([l, v, c]) => (
+            <div key={l} style={{ background: 'var(--surface2)', borderRadius: 6, padding: '10px 12px' }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: 2, color: 'var(--muted)', marginBottom: 4 }}>{l}</div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 14, color: c }}>{v}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card-label" style={{ marginBottom: 10 }}>FINDINGS ({findings.length})</div>
+        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          {findings.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, padding: '20px 0', textAlign: 'center' }}>
+              No findings
+            </div>
+          ) : (
+            findings.map(f => (
+              <div key={f.id} className={`finding-card severity-${f.severity}`} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div className="finding-title" style={{ fontSize: 11 }}>{f.title}</div>
+                  <span className={`badge badge-${f.severity}`}>{f.severity}</span>
+                </div>
+                <div className="finding-meta">{f.owasp_ref} · CVSS {f.cvss_score}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginBottom: 6 }}>PAYLOAD</div>
+                <div className="code" style={{ fontSize: 9, maxHeight: 80, overflow: 'hidden' }}>
+                  {f.evidence_payload?.slice(0, 200)}...
+                </div>
+                {f.remediation && (
+                  <div className="remediation-box" style={{ marginTop: 8, fontSize: 11 }}>{f.remediation.slice(0, 200)}</div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Findings Page ───────────────────────────────────────────────────────────
+function FindingsPage() {
+  const [findings, setFindings] = useState([]);
+  const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    const q = filter !== 'all' ? `?severity=${filter}` : '';
+    api(`/findings/${q}`).then(d => d && setFindings(d));
+  }, [filter]);
+
+  const severities = ['all', 'critical', 'high', 'medium', 'low'];
+
+  return (
+    <div className="fade-in">
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {severities.map(s => (
+          <button key={s} className={`btn ${filter === s ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: 10, padding: '5px 12px' }}
+            onClick={() => setFilter(s)}>
+            {s.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {findings.length === 0 ? (
+        <div className="card empty">
+          <div className="empty-icon">✓</div>
+          <div className="empty-title">No findings</div>
+          <div className="empty-sub">Run a campaign to discover vulnerabilities</div>
+        </div>
+      ) : (
+        findings.map(f => (
+          <div key={f.id} className={`finding-card severity-${f.severity} fade-in`}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+              <div className="finding-title">{f.title}</div>
+              <span className={`badge badge-${f.severity}`}>{f.severity.toUpperCase()}</span>
+            </div>
+            <div className="finding-meta">
+              <span>OWASP: {f.owasp_ref}</span>
+              <span>MITRE: {f.mitre_atlas_ref || '—'}</span>
+              <span>CVSS: {f.cvss_score}</span>
+            </div>
+            <div className="finding-section-label">ATTACK PAYLOAD</div>
+            <div className="code">{f.evidence_payload?.slice(0, 400)}</div>
+            <div className="finding-section-label">MODEL RESPONSE</div>
+            <div className="code">{f.evidence_response?.slice(0, 400)}</div>
+            {f.remediation && (
+              <>
+                <div className="finding-section-label">REMEDIATION</div>
+                <div className="remediation-box">{f.remediation}</div>
+              </>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── App Shell ───────────────────────────────────────────────────────────────
+function App() {
+  const [page, setPage] = useState('home');
+
+  const navItems = [
+    { id: 'home', icon: '⬡', label: 'DASHBOARD' },
+    { id: 'campaigns', icon: '◈', label: 'CAMPAIGNS' },
+    { id: 'findings', icon: '◉', label: 'FINDINGS' },
+  ];
+
+  const titles = { home: 'Dashboard', campaigns: 'Campaigns', findings: 'Findings' };
+
+  return (
+    <div className="layout">
+      <div className="sidebar">
+        <div className="sidebar-logo">
+          <div className="logo-text"><span className="k">K</span>RAIT</div>
+          <div className="logo-sub">LLM RED TEAM · IOSEC.IN</div>
+        </div>
+        <div className="nav-items">
+          {navItems.map(n => (
+            <div key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`}
+              onClick={() => setPage(n.id)}>
+              <span>{n.icon}</span>
+              <span>{n.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="sidebar-footer">v0.4.0 · lance.iosec.in</div>
+      </div>
+
+      <div className="main">
+        <div className="topbar">
+          <div className="page-title">{titles[page]}</div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' }}>
+            LANCE · lance.iosec.in
+          </div>
+        </div>
+        <div className="content">
+          {page === 'home' && <Home onNav={setPage} />}
+          {page === 'campaigns' && <CampaignsPage />}
+          {page === 'findings' && <FindingsPage />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

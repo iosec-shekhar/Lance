@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  api:
+    build: .
+    container_name: lance-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://lance:lance@db:5432/lance
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JUDGE_MODEL=${JUDGE_MODEL:-ollama/llama3}
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - ./reports:/app/reports
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: lance-db
+    environment:
+      POSTGRES_USER: lance
+      POSTGRES_PASSWORD: lance
+      POSTGRES_DB: lance
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lance"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: lance-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  # Serve the static dashboard
+  dashboard:
+    image: nginx:alpine
+    container_name: lance-dashboard
+    ports:
+      - "3000:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  ollama_data:

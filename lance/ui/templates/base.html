@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}LANCE{% endblock %} — LLM Red Team</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' fill='%230D0E14'/%3E%3Cpolygon points='4,24 38,12 44,24 38,36' fill='%231050D0' opacity='0.3'/%3E%3Cpolygon points='4,24 38,12 44,24 38,36' fill='none' stroke='%231050D0' stroke-width='2.5'/%3E%3Cline x1='4' y1='24' x2='44' y2='24' stroke='%231050D0' stroke-width='1.2' opacity='0.5'/%3E%3Ccircle cx='44' cy='24' r='3.5' fill='%231050D0'/%3E%3Ccircle cx='4' cy='24' r='2' fill='%238B8FA8'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- SIDEBAR NAV -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
+      <polygon points="4,24 38,12 44,24 38,36" fill="#1050D0" opacity="0.25"/>
+      <polygon points="4,24 38,12 44,24 38,36" fill="none" stroke="#1050D0" stroke-width="2.5"/>
+      <line x1="4" y1="24" x2="44" y2="24" stroke="#1050D0" stroke-width="1.2" opacity="0.5"/>
+      <circle cx="44" cy="24" r="3.5" fill="#1050D0"/>
+      <circle cx="4"  cy="24" r="2"   fill="#8B8FA8"/>
+    </svg>
+    <div>
+      <div class="sb-wm"><span class="l">L</span>ANCE</div>
+      <div class="sb-ver">v{{ version }}</div>
+    </div>
+  </div>
+
+  <nav class="sb-nav">
+    <a href="/" class="sb-link {% block nav_dashboard %}{% endblock %}">
+      <svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
+      Dashboard
+    </a>
+    <a href="/new" class="sb-link {% block nav_new %}{% endblock %}">
+      <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v8M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      New Scan
+    </a>
+  </nav>
+
+  <div class="sb-footer">
+    <a href="https://lance.iosec.in" target="_blank" class="sb-ext">lance.iosec.in ↗</a>
+    <a href="/api/docs" target="_blank" class="sb-ext">API Docs ↗</a>
+  </div>
+</aside>
+
+<!-- MAIN AREA -->
+<div class="layout">
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="tb-left">
+      <button class="tb-menu" onclick="document.getElementById('sidebar').classList.toggle('open')" aria-label="Menu">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <span class="tb-breadcrumb">{% block breadcrumb %}Dashboard{% endblock %}</span>
+    </div>
+    <div class="tb-right">
+      <a href="/new" class="btn-primary-sm">+ New Scan</a>
+    </div>
+  </header>
+
+  <!-- PAGE CONTENT -->
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

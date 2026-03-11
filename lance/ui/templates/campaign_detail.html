@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }}{% endblock %}
+{% block breadcrumb %}<a href="/" class="bc-link">Dashboard</a> / {{ campaign.name }}{% endblock %}
+
+{% block content %}
+
+<!-- CAMPAIGN HEADER -->
+<div class="campaign-header card mb-24">
+  <div class="ch-left">
+    <div class="ch-name">{{ campaign.name }}</div>
+    <div class="ch-meta">
+      <span class="model-tag">{{ campaign.target_model }}</span>
+      <span class="badge badge-{{ campaign.status }}">{{ campaign.status }}</span>
+      <span class="font-mono text-muted" style="font-size:11px">{{ campaign.id_short }}</span>
+    </div>
+    {% if campaign.attack_modules %}
+    <div class="ch-modules">
+      {% for m in campaign.attack_modules %}
+      <span class="mod-chip">{{ m.replace('_',' ').title() }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="ch-right">
+    <div class="risk-display">
+      {% if campaign.risk_score is not none %}
+      <div class="rd-score risk-{% if campaign.risk_score >= 7 %}high{% elif campaign.risk_score >= 4 %}med{% else %}low{% endif %}">
+        {{ "%.1f"|format(campaign.risk_score) }}
+      </div>
+      <div class="rd-label">Risk Score</div>
+      <div class="rd-verdict {% if campaign.risk_score >= 7 %}text-red{% elif campaign.risk_score >= 4 %}text-orange{% else %}text-green{% endif %}">
+        {% if campaign.risk_score >= 7 %}HIGH RISK
+        {% elif campaign.risk_score >= 4 %}MEDIUM RISK
+        {% else %}LOW RISK{% endif %}
+      </div>
+      {% else %}
+      <div class="rd-score text-muted">—</div>
+      <div class="rd-label">Pending</div>
+      {% endif %}
+    </div>
+    {% if campaign.status == 'completed' %}
+    <a href="/api/report/{{ campaign.id }}" target="_blank" class="btn-primary-sm mt-8">View Full Report ↗</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- LIVE PROGRESS (shown only while running) -->
+{% if campaign.status in ['running', 'pending'] %}
+<div class="card mb-24" id="progressCard">
+  <div class="card-head">
+    <span class="card-title">
+      <span class="live-dot"></span> Live Scan Progress
+    </span>
+    <span class="card-sub" id="progressMsg">Connecting...</span>
+  </div>
+  <div class="progress-track">
+    <div class="progress-fill" id="progressBar" style="width:0%"></div>
+  </div>
+  <div class="progress-stats">
+    <span id="progressCurrent">0</span> / <span id="progressTotal">—</span> probes
+    &nbsp;·&nbsp;
+    <span id="progressPct">0%</span>
+  </div>
+</div>
+{% endif %}
+
+<!-- PROBE STATS ROW -->
+<div class="stats-row mb-24">
+  <div class="stat-card">
+    <div class="sc-n">{{ campaign.total_probes }}</div>
+    <div class="sc-l">Probes Fired</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n red">{{ campaign.successful_attacks }}</div>
+    <div class="sc-l">Hits</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n green">{{ campaign.failed_attacks }}</div>
+    <div class="sc-l">Blocked</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n orange">{{ campaign.error_count }}</div>
+    <div class="sc-l">Errors</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-n purple">{{ findings|length }}</div>
+    <div class="sc-l">Findings</div>
+  </div>
+</div>
+
+<!-- CHARTS 2x2 -->
+<div class="charts-grid mb-24">
+  <div class="card chart-card">
+    <div class="card-ttl">Severity Distribution</div>
+    <div style="height:220px"><canvas id="cSev"></canvas></div>
+  </div>
+  <div class="card chart-card">
+    <div class="card-ttl">Attack Success by Module</div>
+    <div style="height:220px"><canvas id="cMod"></canvas></div>
+  </div>
+  <div class="card chart-card">
+    <div class="card-ttl">Probe Outcomes</div>
+    <div style="height:200px"><canvas id="cOut"></canvas></div>
+  </div>
+  <div class="card chart-card">
+    <div class="card-ttl">OWASP LLM Top 10 Exposure</div>
+    <div style="height:200px;display:flex;justify-content:center"><canvas id="cRadar" style="max-width:280px"></canvas></div>
+  </div>
+</div>
+
+<!-- FINDINGS TABLE -->
+{% if findings %}
+<div class="card">
+  <div class="card-head">
+    <span class="card-title">Findings ({{ findings|length }})</span>
+    <div class="card-actions">
+      <select id="sevFilter" class="search-input" onchange="filterFindings()" style="width:140px">
+        <option value="">All severities</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" id="findingsTable">
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Title</th>
+          <th>OWASP</th>
+          <th>MITRE</th>
+          <th>CVSS</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in findings %}
+        <tr data-sev="{{ f.severity }}">
+          <td><span class="sev-badge sev-{{ f.severity }}">{{ f.severity }}</span></td>
+          <td>
+            <div class="cell-primary">{{ f.title }}</div>
+            <div class="cell-sub">{{ f.description[:90] }}{% if f.description|length > 90 %}…{% endif %}</div>
+          </td>
+          <td><span class="ref-tag">{{ f.owasp_ref or '—' }}</span></td>
+          <td><span class="ref-tag mitre">{{ f.mitre_atlas_ref or '—' }}</span></td>
+          <td>
+            {% if f.cvss_score %}
+            <span class="cvss-score cvss-{% if f.cvss_score >= 9 %}c{% elif f.cvss_score >= 7 %}h{% elif f.cvss_score >= 4 %}m{% else %}l{% endif %}">
+              {{ "%.1f"|format(f.cvss_score) }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <button class="action-btn" onclick="toggleDrawer('drawer-{{ loop.index }}')">Details</button>
+          </td>
+        </tr>
+        <!-- DRAWER ROW -->
+        <tr class="drawer-row" id="drawer-{{ loop.index }}" style="display:none">
+          <td colspan="6">
+            <div class="finding-drawer">
+              <div class="drawer-grid">
+                <div class="drawer-section">
+                  <div class="drawer-lbl">Payload (Attack Probe)</div>
+                  <pre class="code-block">{{ f.evidence_payload }}</pre>
+                </div>
+                <div class="drawer-section">
+                  <div class="drawer-lbl">Model Response</div>
+                  <pre class="code-block response">{{ f.evidence_response[:600] }}{% if f.evidence_response|length > 600 %}…{% endif %}</pre>
+                </div>
+              </div>
+              {% if f.remediation %}
+              <div class="drawer-section mt-12">
+                <div class="drawer-lbl">Remediation</div>
+                <div class="remediation-text">{{ f.remediation }}</div>
+              </div>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="es-title" style="color:var(--green)">✓ No findings</div>
+    <div class="es-body">No confirmed vulnerabilities in this campaign.</div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chartData = {{ chart_data | safe }};
+const campaignId = "{{ campaign.id }}";
+const campaignStatus = "{{ campaign.status }}";
+const mono = "'Space Mono', monospace";
+const grid = 'rgba(226,228,238,0.7)';
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+// Severity doughnut
+new Chart(document.getElementById('cSev'), {
+  type: 'doughnut',
+  data: {
+    labels: chartData.severity.labels,
+    datasets: [{
+      data: chartData.severity.data,
+      backgroundColor: ['#7E22CE','#DC2626','#EA580C','#0E7490'],
+      borderWidth: 0, hoverOffset: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, cutout: '62%',
+    plugins: { legend: { position: 'right', labels: { padding: 14, boxWidth: 10, font: { family: mono, size: 10 } } } }
+  }
+});
+
+// Module bar
+new Chart(document.getElementById('cMod'), {
+  type: 'bar',
+  data: {
+    labels: chartData.modules.labels,
+    datasets: [
+      { label: 'Hits',    data: chartData.modules.hits,    backgroundColor: '#DC2626', borderWidth: 0, borderRadius: 3 },
+      { label: 'Blocked', data: chartData.modules.blocked, backgroundColor: '#0E7490', borderWidth: 0, borderRadius: 3 },
+    ]
+  },
+  options: {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { grid: { color: grid }, ticks: { font: { family: mono, size: 9 }, color: '#8B8FA8' } },
+      y: { grid: { display: false }, ticks: { font: { family: mono, size: 9 }, color: '#8B8FA8' } },
+    },
+    plugins: { legend: { labels: { padding: 12, boxWidth: 10, font: { family: mono, size: 10 } } } }
+  }
+});
+
+// Outcomes doughnut
+new Chart(document.getElementById('cOut'), {
+  type: 'doughnut',
+  data: {
+    labels: chartData.outcomes.labels,
+    datasets: [{
+      data: chartData.outcomes.data,
+      backgroundColor: ['#DC2626','#0E7490','#C8CAD8','#EA580C'],
+      borderWidth: 0,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, cutout: '55%',
+    plugins: { legend: { position: 'right', labels: { padding: 12, boxWidth: 10, font: { family: mono, size: 10 } } } }
+  }
+});
+
+// OWASP Radar
+new Chart(document.getElementById('cRadar'), {
+  type: 'radar',
+  data: {
+    labels: chartData.radar.labels,
+    datasets: [{
+      label: 'This Scan',
+      data: chartData.radar.data,
+      borderColor: '#1050D0',
+      backgroundColor: 'rgba(16,80,208,0.1)',
+      borderWidth: 2.5,
+      pointBackgroundColor: '#1050D0',
+      pointRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: { r: {
+      min: 0, max: 10,
+      grid: { color: grid }, angleLines: { color: grid },
+      pointLabels: { font: { family: mono, size: 9 }, color: '#8B8FA8' },
+      ticks: { display: false, stepSize: 2 },
+    }},
+    plugins: { legend: { display: false } }
+  }
+});
+
+// ── WebSocket live progress ───────────────────────────────────────────────────
+if (campaignStatus === 'running' || campaignStatus === 'pending') {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/${campaignId}`);
+
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'progress') {
+      document.getElementById('progressBar').style.width = msg.pct + '%';
+      document.getElementById('progressMsg').textContent = msg.message;
+      document.getElementById('progressCurrent').textContent = msg.current;
+      document.getElementById('progressTotal').textContent = msg.total;
+      document.getElementById('progressPct').textContent = msg.pct + '%';
+    }
+    if (msg.type === 'complete') {
+      // Reload the page to show final results
+      location.reload();
+    }
+  };
+
+  // Keepalive ping
+  setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 15000);
+
+  // Poll as fallback if WS fails
+  ws.onerror = () => {
+    setInterval(() => {
+      fetch(`/api/campaigns`).then(r => r.json()).then(cs => {
+        const c = cs.find(x => x.id === campaignId);
+        if (c && c.status === 'completed') location.reload();
+      });
+    }, 3000);
+  };
+}
+
+// ── Findings drawer ───────────────────────────────────────────────────────────
+function toggleDrawer(id) {
+  const row = document.getElementById(id);
+  const isOpen = row.style.display !== 'none';
+  // Close all open drawers
+  document.querySelectorAll('.drawer-row').forEach(r => r.style.display = 'none');
+  document.querySelectorAll('.action-btn').forEach(b => {
+    if (b.textContent === 'Close') b.textContent = 'Details';
+  });
+  if (!isOpen) {
+    row.style.display = '';
+    // Find the button that opened this
+    const btn = row.previousElementSibling?.querySelector('.action-btn');
+    if (btn) btn.textContent = 'Close';
+  }
+}
+
+// ── Severity filter ───────────────────────────────────────────────────────────
+function filterFindings() {
+  const sev = document.getElementById('sevFilter').value;
+  document.querySelectorAll('#findingsTable tbody tr:not(.drawer-row)').forEach(row => {
+    row.style.display = (!sev || row.dataset.sev === sev) ? '' : 'none';
+    // Also hide any open drawer for hidden rows
+    if (row.style.display === 'none') {
+      const next = row.nextElementSibling;
+      if (next?.classList.contains('drawer-row')) next.style.display = 'none';
+    }
+  });
+}
+</script>
+{% endblock %}
