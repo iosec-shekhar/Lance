@@ -27,11 +27,15 @@ SEV_COLOURS = {
 
 # ── Module display names (#5) ──────────────────────────────────
 MODULE_DISPLAY = {
-    "prompt_injection": "Prompt Injection",
+    "prompt_injection":  "Prompt Injection",
     "data_exfiltration": "Data Exfiltration",
-    "jailbreak": "Jailbreak",
-    "model_dos": "Model DoS",
-    "rag_poisoning": "RAG Poisoning",
+    "jailbreak":         "Jailbreak",
+    "model_dos":         "Model DoS",
+    "rag_poisoning":     "RAG Poisoning",
+    "bias":              "Bias",
+    "pii_leakage":       "PII Leakage",
+    "toxicity":          "Toxicity",
+    "misinformation":    "Misinformation",
 }
 
 def fmt_module(name: str) -> str:
@@ -60,7 +64,7 @@ def print_banner():
     console.print(wordmark)
     console.print(
         "  [dim]LLM Adversarial Neural Component Evaluator[/dim]  "
-        "[bold blue]·[/bold blue]  [bold blue]v0.5.0[/bold blue]  "
+        "[bold blue]·[/bold blue]  [bold blue]v0.6.0[/bold blue]  "
         "[bold blue]·[/bold blue]  [dim]lance.iosec.in[/dim]"
     )
     console.print("  [dim]" + "─" * 62 + "[/dim]")
@@ -476,6 +480,208 @@ def compare(models, name, modules, output, system_prompt):
             console.print(f"\n[bold green]Comparison report saved:[/bold green] [cyan]{output}[/cyan]")
         finally:
             db.close()
+
+    asyncio.run(_run())
+
+
+
+
+@app.command(name="run")
+@click.argument("config_file")
+@click.option("--output",    default=None,  help="Output folder override")
+@click.option("--dry-run",   is_flag=True,  help="Validate config without running scans")
+@click.option("--fail-on",   default=None,  type=float, help="Override fail_on threshold")
+def run_config(config_file, output, dry_run, fail_on):
+    """Run a full assessment from a YAML config file.
+
+    \b
+    Example:
+      lance run config.yaml
+      lance run config.yaml --output results/
+      lance run config.yaml --dry-run
+      lance run config.yaml --fail-on 7.0
+
+    \b
+    See lance/config_runner/example_config.yaml for config format.
+    """
+    print_banner()
+    from lance.config_runner.runner import load_config, execute_config
+    import sys
+
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        console.print(f"[red]Failed to load config: {e}[/red]")
+        raise SystemExit(1)
+
+    if output:
+        config.output_folder = output
+    if fail_on is not None:
+        config.fail_on = fail_on
+
+    console.print(Panel(
+        f"[bold]Config:[/bold]   {config_file}\n"
+        f"[bold]Targets:[/bold]  {len(config.targets)}\n"
+        f"[bold]Modules:[/bold]  {', '.join(config.modules)}\n"
+        f"[bold]Output:[/bold]   {config.output_folder}\n"
+        f"[bold]Fail-on:[/bold]  {config.fail_on or 'disabled'}",
+        title="[bold blue]LANCE RUN[/bold blue]",
+        border_style="blue",
+    ))
+
+    result = asyncio.run(execute_config(config, dry_run=dry_run))
+    sys.exit(result.get("exit_code", 0))
+
+
+@app.command()
+@click.argument("campaign_id")
+@click.option("--system-prompt",      default=None, help="Updated system prompt to test against")
+@click.option("--system-prompt-file", default=None, help="File containing updated system prompt")
+@click.option("--retries",            default=3,    help="Attempts per finding (default: 3)")
+def guardrail(campaign_id, system_prompt, system_prompt_file, retries):
+    """Re-fire findings from a campaign to verify they are remediated.
+
+    \b
+    Run after fixing a vulnerability to confirm the guardrail holds.
+
+    \b
+    Example:
+      lance guardrail a1b2c3d4
+      lance guardrail a1b2c3d4 --system-prompt-file ./prompts/fixed.txt
+    """
+    print_banner()
+
+    sp = system_prompt
+    if system_prompt_file:
+        try:
+            with open(system_prompt_file) as f:
+                sp = f.read().strip()
+        except FileNotFoundError:
+            console.print(f"[red]File not found: {system_prompt_file}[/red]")
+            raise SystemExit(1)
+
+    async def _run():
+        from lance.db.models import init_db, SessionLocal, Finding
+        from lance.guardrails.engine import GuardrailEngine
+        init_db()
+        db = SessionLocal()
+        try:
+            findings = db.query(Finding).filter(Finding.campaign_id == campaign_id).all()
+            if not findings:
+                console.print(f"[yellow]No findings for campaign {campaign_id[:8]}[/yellow]")
+                return
+
+            console.print(f"Running guardrails on [bold]{len(findings)}[/bold] findings...
+")
+            engine  = GuardrailEngine(model="local", connector=None, judge=None)
+            results = await engine.run_all(
+                findings=[{
+                    "id":        str(f.id),
+                    "module":    f.attack_module if hasattr(f, "attack_module") else "unknown",
+                    "payload":   f.payload or "",
+                    "objective": f.description or "",
+                    "owasp_ref": f.owasp_ref or "",
+                    "mitre_ref": f.mitre_ref or "",
+                } for f in findings],
+                system_prompt=sp,
+                retries=retries,
+            )
+
+            summary = engine.summary(results)
+            table = Table(show_header=True, box=box.SIMPLE_HEAVY)
+            table.add_column("Finding",  width=36)
+            table.add_column("Module",   width=18)
+            table.add_column("Result",   width=12)
+            table.add_column("Retries",  width=8)
+
+            for r in results:
+                status = "[green]PASSED[/green]" if r.passed else "[red]FAILED[/red]"
+                table.add_row(r.finding_id[:8], r.module, status, str(r.retries))
+
+            console.print(table)
+            console.print(
+                f"\n[bold]Summary:[/bold] "
+                f"[green]{summary['passed']} passed[/green] / "
+                f"[red]{summary['failed']} failed[/red] "
+                f"([bold]{summary['pass_rate']}%[/bold] remediated)"
+            )
+        finally:
+            db.close()
+
+    asyncio.run(_run())
+
+
+@app.command()
+@click.argument("model")
+@click.option("--chain",         default=None, help="Path to chain YAML template")
+@click.option("--chain-type",    default=None, help="Built-in chain type: persona_anchoring, crescendo, context_poisoning, memory_exploitation, jailbreak_escalation, linear_jailbreak")
+@click.option("--system-prompt", default=None, help="System prompt to test against")
+@click.option("--objective",     default=None, help="Override chain objective")
+def chain(model, chain, chain_type, system_prompt, objective):
+    """Run a multi-turn attack chain against a model.
+
+    \b
+    Examples:
+      lance chain ollama/llama3 --chain-type crescendo
+      lance chain ollama/llama3 --chain lance/chains/templates/persona_anchoring.yaml
+      lance chain openai/gpt-4o --chain-type linear_jailbreak --system-prompt "You are a helpful assistant."
+    """
+    print_banner()
+    from pathlib import Path as _Path
+    from lance.chains.engine import ChainEngine, load_chain, AttackChain, ChainTurn
+
+    BUILTIN_CHAINS = {
+        "persona_anchoring":   "lance/chains/templates/persona_anchoring.yaml",
+        "crescendo":           "lance/chains/templates/crescendo.yaml",
+        "context_poisoning":   "lance/chains/templates/context_poisoning.yaml",
+        "memory_exploitation": "lance/chains/templates/memory_exploitation.yaml",
+        "jailbreak_escalation":"lance/chains/templates/jailbreak_escalation.yaml",
+        "linear_jailbreak":    "lance/chains/templates/linear_jailbreak.yaml",
+    }
+
+    chain_path = chain
+    if chain_type:
+        chain_path = BUILTIN_CHAINS.get(chain_type)
+        if not chain_path:
+            console.print(f"[red]Unknown chain type: {chain_type}[/red]")
+            console.print(f"Available: {', '.join(BUILTIN_CHAINS.keys())}")
+            raise SystemExit(1)
+
+    if not chain_path:
+        console.print("[red]Provide --chain or --chain-type[/red]")
+        raise SystemExit(1)
+
+    try:
+        attack_chain = load_chain(chain_path)
+    except FileNotFoundError:
+        console.print(f"[red]Chain file not found: {chain_path}[/red]")
+        raise SystemExit(1)
+
+    if objective:
+        attack_chain.objective = objective
+
+    console.print(Panel(
+        f"[bold]Chain:[/bold]     {attack_chain.name}\n"
+        f"[bold]Type:[/bold]      {attack_chain.chain_type}\n"
+        f"[bold]Objective:[/bold] {attack_chain.objective}\n"
+        f"[bold]Turns:[/bold]     {len(attack_chain.turns)}",
+        title="[bold blue]LANCE CHAIN[/bold blue]",
+        border_style="blue",
+    ))
+
+    async def _run():
+        engine = ChainEngine(model=model)
+        result = await engine.run_chain(attack_chain, system_prompt=system_prompt)
+
+        console.print(f"\n[bold]Result:[/bold] {'[red]COMPLIANCE DETECTED[/red]' if result.success else '[green]RESISTED[/green]'}")
+        if result.compliance_turn:
+            console.print(f"[bold]Compliance on turn:[/bold] {result.compliance_turn}/{result.turns_taken}")
+
+        console.print("\n[bold]Conversation:[/bold]")
+        for msg in result.conversation:
+            role   = msg["role"]
+            colour = "cyan" if role == "user" else "green" if role == "assistant" else "dim"
+            console.print(f"  [{colour}]{role.upper()}:[/{colour}] {msg['content'][:200]}")
 
     asyncio.run(_run())
 

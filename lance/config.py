@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "LANCE"
-    app_version: str = "0.5.0"
+    app_version: str = "0.6.0"
     app_url: str = "https://lance.iosec.in"
     debug: bool = False
 

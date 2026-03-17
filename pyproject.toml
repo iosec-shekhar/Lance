@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lance"
-version = "0.5.0"
+version = "0.6.0"
 description = "LLM Red Team Evaluation Framework — lance.iosec.in"
 authors = ["Shekhar Suman <shekhar@iosec.in>"]
 readme = "README.md"
